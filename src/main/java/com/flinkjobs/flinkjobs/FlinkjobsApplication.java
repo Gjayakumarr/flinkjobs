@@ -3,18 +3,14 @@
 import java.util.ArrayList;
 import java.util.Properties;
 
-import org.apache.flink.api.common.eventtime.WatermarkStrategy;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.utils.ParameterTool;
-import org.apache.flink.connector.kafka.source.KafkaSource;
-import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsInitializer;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer09;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.flinkjobs.config.BoundedOutOfOrdernessGenerator;
 import com.flinkjobs.config.KafkaObjectDeserializationSchema;
 import com.flinkjobs.config.MongoDBSink;
 import com.flinkjobs.constants.Constant;
@@ -25,7 +21,7 @@ import com.mongodb.client.MongoDatabase;
 
 public class FlinkjobsApplication {
 	private static final Logger logger = LoggerFactory.getLogger(FlinkjobsApplication.class);
-	private static final int DEFAULT_PARALLELISM = 10;
+	private static final int DEFAULT_PARALLELISM = 1;
 
 	public static void main(String[] args) throws Exception {
 		System.out.println("Java Version: " + System.getProperty("java.version"));
@@ -40,25 +36,27 @@ public class FlinkjobsApplication {
 		kafkaProperties.setProperty("group.id", Constant.GROUP_ID);
 		kafkaProperties.setProperty(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
-     // Initialize KafkaSource
-     			KafkaSource<ApiLog> kafkaSource = KafkaSource.<ApiLog>builder()
-     					.setBootstrapServers(Constant.BOOTSTRAP_SERVER)
-     					.setTopics(Constant.CONSUMER_TOPIC)
-     					.setGroupId(Constant.GROUP_ID)
-     					.setStartingOffsets(OffsetsInitializer.latest())
-     					.setValueOnlyDeserializer(new KafkaObjectDeserializationSchema()).build();
+		FlinkKafkaConsumer09<ApiLog> consumerRow = new FlinkKafkaConsumer09<>(Constant.CONSUMER_TOPIC, new KafkaObjectDeserializationSchema(), kafkaProperties);
+		consumerRow.setStartFromLatest();
+		// Initialize KafkaSource
+//     			KafkaSource<ApiLog> kafkaSource = KafkaSource.<ApiLog>builder()
+//     					.setBootstrapServers(Constant.BOOTSTRAP_SERVER)
+//     					.setTopics(Constant.CONSUMER_TOPIC)
+//     					.setGroupId(Constant.GROUP_ID)
+//     					.setStartingOffsets(OffsetsInitializer.latest())
+//     					.setValueOnlyDeserializer(new KafkaObjectDeserializationSchema()).build();
 
      			// Configure watermark strategy to handle out-of-order events.
-     			WatermarkStrategy<ApiLog> watermarkStrategy = WatermarkStrategy
-     					.forGenerator(ctx -> new BoundedOutOfOrdernessGenerator())
-     					.withTimestampAssigner((event, timestamp) -> event.getEventTimestamp());
+//     			WatermarkStrategy<ApiLog> watermarkStrategy = WatermarkStrategy
+//     					.forGenerator(ctx -> new BoundedOutOfOrdernessGenerator())
+//     					.withTimestampAssigner((event, timestamp) -> event.getEventTimestamp());
 
         // Create data stream from Kafka
-		DataStream<ApiLog> stream = env
-				.fromSource(kafkaSource, watermarkStrategy, "Kafka Source")
-				.returns(TypeInformation.of(ApiLog.class))
-				.rebalance();
-
+//		DataStream<ApiLog> stream = env
+//				.fromSource(kafkaSource, watermarkStrategy, "Kafka Source")
+//				.returns(TypeInformation.of(ApiLog.class))
+//				.rebalance();
+     	DataStream<ApiLog> stringInputStream = env.addSource(consumerRow).rebalance();
      // Validate and create MongoDB collection.
      			MongoClient mongoClient = MongoClients.create(Constant.MONGODB_URI);
      			MongoDatabase database = mongoClient.getDatabase(Constant.MONGODB_DATABASE_SCHEMA);
@@ -71,7 +69,7 @@ public class FlinkjobsApplication {
         MongoDBSink mongoSink = new MongoDBSink(Constant.MONGODB_URI, Constant.MONGODB_DATABASE_SCHEMA, Constant.MONGODB_DATABASE_COLLECTION);
         
         // Add MongoDB sink to the Flink job with parallelism
-     	stream.addSink(mongoSink).name("MongoDB Sink").setParallelism(parallelism);
+        stringInputStream.addSink(mongoSink).name("MongoDB Sink").setParallelism(parallelism);
 
         // Execute the job
         env.execute("Flink Kafka to MongoDB Job");

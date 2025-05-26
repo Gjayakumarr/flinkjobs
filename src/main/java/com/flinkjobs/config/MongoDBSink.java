@@ -2,14 +2,21 @@ package com.flinkjobs.config;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import org.apache.flink.api.common.state.ListState;
+import org.apache.flink.api.common.state.ListStateDescriptor;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.runtime.state.FunctionInitializationContext;
+import org.apache.flink.runtime.state.FunctionSnapshotContext;
+import org.apache.flink.streaming.api.checkpoint.CheckpointedFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.flinkjobs.packetStucture.ApiLog;
-import com.flinkjobs.packetStucture.KafkaObject;
 import com.mongodb.MongoBulkWriteException;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -20,9 +27,9 @@ import com.mongodb.client.model.InsertManyOptions;
 /**
  * MongoDBSink Custom Flink sink to write Kafka objects to MongoDB.
  */
-public class MongoDBSink extends RichSinkFunction<ApiLog> {
+public class MongoDBSink extends RichSinkFunction<ApiLog> implements CheckpointedFunction {
 
-	private static final long serialVersionUID = 1L;
+	public static final long serialVersionUID = 1L;
 	private static final ObjectMapper objectMapper = new ObjectMapper();
 	private static final Logger logger = LoggerFactory.getLogger(MongoDBSink.class);
 
@@ -32,8 +39,11 @@ public class MongoDBSink extends RichSinkFunction<ApiLog> {
 	private final String databaseName;
 	private final String collectionName;
 
-	private static final int BATCH_SIZE = 50;
+	private static final int BATCH_SIZE = 10;
 	private final List<Document> batchBuffer = new ArrayList<>();
+	
+	 private transient ListState<Document> checkpointedState;
+
 
 	/**
 	 * Constructor to initialize MongoDB connection parameters.
@@ -102,5 +112,30 @@ public class MongoDBSink extends RichSinkFunction<ApiLog> {
 		}
 		super.close();
 	}
+
+	 @Override
+	    public void snapshotState(FunctionSnapshotContext context) throws Exception {
+	        checkpointedState.clear();
+	        for (Document doc : batchBuffer) {
+	            checkpointedState.add(doc);
+	        }
+	        flush(); // flush on checkpoint to ensure durability
+	    }
+
+	    @Override
+	    public void initializeState(FunctionInitializationContext context) throws Exception {
+	        ListStateDescriptor<Document> descriptor = new ListStateDescriptor<>(
+	                "mongodb-sink-buffer",
+	                TypeInformation.of(new TypeHint<Document>() {
+	                })
+	        );
+	        checkpointedState = context.getOperatorStateStore().getListState(descriptor);
+
+	        if (context.isRestored()) {
+	            for (Document doc : checkpointedState.get()) {
+	                batchBuffer.add(doc);
+	            }
+	        }
+	    }
 }
 

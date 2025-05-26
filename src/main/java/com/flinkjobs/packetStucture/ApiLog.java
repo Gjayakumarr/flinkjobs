@@ -1,5 +1,6 @@
 package com.flinkjobs.packetStucture;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.Serializable;
@@ -8,13 +9,14 @@ import org.springframework.data.mongodb.core.mapping.Document;
 
 @Document
 public class ApiLog implements Serializable {
-	private static final long serialVersionUID = 1L;
+	public static final long serialVersionUID = 1L;
 
 	private String endApi;
     private long dateTime;
     private String host;
     private String userAgent;
     private String requestFormat;
+    @JsonProperty("exception")
     private boolean isException;
     private int responseCode;
     private boolean success;
@@ -65,11 +67,11 @@ public class ApiLog implements Serializable {
         return isException;
     }
 
-    public void setException(boolean isException) {
-        this.isException = isException;
-    }
+    public void setIsException(boolean isException) {
+		this.isException = isException;
+	}
 
-    public int getResponseCode() {
+	public int getResponseCode() {
         return responseCode;
     }
 

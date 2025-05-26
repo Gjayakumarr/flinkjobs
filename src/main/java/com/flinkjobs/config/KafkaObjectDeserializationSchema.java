@@ -21,7 +21,7 @@ import com.flinkjobs.packetStucture.KafkaObject;
 public class KafkaObjectDeserializationSchema
         implements DeserializationSchema<ApiLog>, SerializationSchema<ApiLog> {
 
-    private static final long serialVersionUID = 1L;
+    public static final long serialVersionUID = 1L;
     private static final Logger logger = LoggerFactory.getLogger(KafkaObjectDeserializationSchema.class);
     private final ObjectMapper objectMapper;
 
@@ -60,8 +60,8 @@ public class KafkaObjectDeserializationSchema
         }
 
         try {
-        	String line = new String(message, StandardCharsets.UTF_8);
-        	ApiLog kafkaObject = objectMapper.readValue(line, ApiLog.class);
+//        	String line = new String(message, StandardCharsets.UTF_8);
+        	ApiLog kafkaObject = objectMapper.readValue(message, ApiLog.class);
 //            ApiLog apiLog = objectMapper.readValue(message, ApiLog.class);
 //            kafkaObject.setApiLog(apiLog);  
             return kafkaObject;
